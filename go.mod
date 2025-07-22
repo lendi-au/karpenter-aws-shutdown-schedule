@@ -1,4 +1,4 @@
-module karpenter-aws-shutdown-schedule
+module github.com/edify42/karpenter-aws-shutdown-schedule
 
 go 1.24.0
 

@@ -87,4 +87,3 @@ func handler(ctx context.Context, request events.CloudWatchEvent) error {
 func main() {
 	lambda.Start(handler)
 }
-

@@ -1,5 +1,5 @@
 {
-  "app": "go mod download && go run karpenter-aws-shutdown-schedule.go",
+  "app": "go mod download && go run stacks/karpenter-aws-shutdown-schedule.go",
   "watch": {
     "include": [
       "**"
