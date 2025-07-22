@@ -33,18 +33,22 @@ The startup behaviour is much simpler, with karpenter setting the desired node n
 
 ## build
 
-Setting `export BUILD_ARCH=amd64` will allow you to build for x64.
-architectures. Hop into the [src](./src/) directory and run `make build`.
-This should generate a bootstrap file in the lambda directory.
 
-`LAMBDA_ROLE_ARN=arn:aws:iam::2231231231231:role/my-custom-karpenter-role`
+``
 If defined, we use this role by the lambda instead of creating one.
 
 Set on the node group when it turns on again. This is done at build time as we
 setup the AWS Eventbridge schedule.
 
 ```bash
-KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE="30 20 0 0 0"
+# cat .env
+BUILD_ARCH=amd64 # build amd64 golang binary instead
+KUBERNETES_SERVICE_HOST="https://api-server.k8s.io" # k8s master API endpoint
+KUBERNETES_CLUSTER_NAME="my-cluster"
+KARPENTER_NODEPOOL_NAME="KARPENTER_DYNAMIC" # karpenter node pool name
+KARPENTER_EXTRA_SHUTDOWN_TAG= # optional extra tag to search for karpenter nodes. checks only for existence.
+KARPENTER_NODEPOOL_LIMITS_CPU="1000" # number of CPU cores karpenter can scale up to when it turns on the nodes again
+KARPENTER_NODEPOOL_LIMITS_MEMORY="1000Gi" # number of memory karpenter should
 
 ```
 
@@ -57,20 +61,13 @@ values) to target what it needs:
 ```bash
 
 cat .env
-KUBERNETES_SERVICE_HOST="https://api-server.k8s.io" # k8s master API endpoint
-KUBERNETES_CLUSTER_NAME="my-cluster"
-KARPENTER_NODEPOOL_NAME="KARPENTER_DYNAMIC" # karpenter node pool name
-KARPENTER_EXTRA_SHUTDOWN_TAG= # optional extra tag to search for karpenter nodes. checks only for existence.
-KARPENTER_NODEPOOL_LIMITS_CPU="1000" # number of CPU cores karpenter can scale up to when it turns on the nodes again
-KARPENTER_NODEPOOL_LIMITS_MEMORY="1000Gi" # number of memory karpenter should
-
 KARPENTER_VPC_ID=vpc-03434234234 # specify a VPC ID, subnet + security group if your EKS cluster is internal
 KARPENTER_SUBNET=subnet-34234234
 KARPENTER_SECURITY_GROUP=sg-1232323
+LAMBDA_ROLE_ARN=arn:aws:iam::2231231231231:role/my-custom-karpenter-role # custom lambda role predefined and not created here
 
-
-KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE='cron(30 22 * * ? *)' # When the lambda should run to shut things DOWN (10:30pm here)
-KARPENTER_NODEPOOL_STARTUP_SCHEDULE='cron(0 7 * * ? *)' # When the lambda should run and start things UP (7:00am here)
+KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE="cron(0 22 * * ? *)" # When to shutdown the lambda (10pm every day)
+KARPENTER_NODEPOOL_STARTUP_SCHEDULE="cron(0 7 ? * MON-FRI *)" # When the lambda should run and start things UP (7:00am Monday to Friday)
 KARPENTER_SCHEDULE_TIMEZONE="Australia/Sydney" # Timezone - make it useful!
 ```
 

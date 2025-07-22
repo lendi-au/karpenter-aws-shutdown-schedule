@@ -13,7 +13,7 @@ import (
 	"github.com/aws/constructs-go/constructs/v10"
 	"github.com/aws/jsii-runtime-go"
 
-	"github.com/edify42/karpenter-aws-shutdown-schedule/pkg/utils"
+	"github.com/lendi-au/karpenter-aws-shutdown-schedule/pkg/utils"
 )
 
 type KarpenterAwsShutdownScheduleStackProps struct {
