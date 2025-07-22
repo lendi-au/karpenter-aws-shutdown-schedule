@@ -54,8 +54,12 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	}
 
 	nodepool := utils.GetenvDefault("KARPENTER_NODEPOOL_NAME", "default")
+	k8sHost := utils.GetenvDefault("KUBERNETES_SERVICE_HOST", "https://k8s.api")
+	clusterName := utils.GetenvDefault("KUBERNETES_CLUSTER_NAME", "dummy")
 	envMap := map[string]*string{
-		"NODEPOOL_NAME": jsii.String(nodepool), // Replace with your NodePool name
+		"KARPENTER_NODEPOOL_NAME": jsii.String(nodepool), // Replace with your NodePool name
+		"KUBERNETES_SERVICE_HOST": &k8sHost,
+		"KUBERNETES_CLUSTER_NAME": &clusterName,
 	}
 	if os.Getenv("KARPENTER_EXTRA_SHUTDOWN_TAG") != "" {
 		envMap["SHUTDOWN_TAG"] = jsii.String(os.Getenv("KARPENTER_EXTRA_SHUTDOWN_TAG"))
@@ -66,7 +70,7 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		FunctionName: jsii.String(name),
 		Architecture: arch,
 		Handler:      jsii.String("main"),
-		Code:         awslambda.Code_FromAsset(jsii.String("lambda"), nil),
+		Code:         awslambda.Code_FromAsset(jsii.String("build"), nil),
 		Environment:  &envMap,
 		Role:         lambdaRole, // adds custom role to lambda
 	}

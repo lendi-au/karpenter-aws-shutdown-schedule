@@ -22,3 +22,6 @@ cdk.context.json
 # binary
 build
 lambda/bootstrap
+
+# environment
+.env
