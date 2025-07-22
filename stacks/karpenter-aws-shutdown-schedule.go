@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
@@ -65,12 +66,22 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		envMap["SHUTDOWN_TAG"] = jsii.String(os.Getenv("KARPENTER_EXTRA_SHUTDOWN_TAG"))
 	}
 
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("Current working directory: ", cwd)
+
+	buildPath := fmt.Sprintf("%s/build", cwd)
+
+	fmt.Println("Build path: ", buildPath)
+
 	functionProps = &awslambda.FunctionProps{
 		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
 		FunctionName: jsii.String(name),
 		Architecture: arch,
 		Handler:      jsii.String("main"),
-		Code:         awslambda.Code_FromAsset(jsii.String("../build"), nil),
+		Code:         awslambda.Code_FromAsset(jsii.String(buildPath), nil),
 		Environment:  &envMap,
 		Role:         lambdaRole, // adds custom role to lambda
 	}

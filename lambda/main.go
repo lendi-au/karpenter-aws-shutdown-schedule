@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
@@ -156,7 +155,11 @@ func newDynamicClient(ctx context.Context) (*dynamic.DynamicClient, error) {
 	return dynamicClient, nil
 }
 
-func handler(ctx context.Context, request events.CloudWatchEvent) error {
+type ActionEvent struct {
+	Action string `json:"Action"`
+}
+
+func handler(ctx context.Context, request ActionEvent) error {
 	fmt.Printf("ctx: %v", ctx)
 	fmt.Printf("request: %v", request)
 
