@@ -70,7 +70,7 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		FunctionName: jsii.String(name),
 		Architecture: arch,
 		Handler:      jsii.String("main"),
-		Code:         awslambda.Code_FromAsset(jsii.String("build"), nil),
+		Code:         awslambda.Code_FromAsset(jsii.String("../build"), nil),
 		Environment:  &envMap,
 		Role:         lambdaRole, // adds custom role to lambda
 	}
