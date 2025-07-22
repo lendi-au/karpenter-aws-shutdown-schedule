@@ -86,8 +86,9 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	}
 
 	// EventBridge Scheduler with timezone support
-	schedule := utils.GetenvDefault("KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE", "cron(0 22 * * ? *)") // 10pm night time
-	timezone := utils.GetenvDefault("KARPENTER_SCHEDULE_TIMEZONE", "Australia/Sydney")            // Yes I'm in Sydney - Adjust to your needs.
+	shutdownSchedule := utils.GetenvDefault("KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE", "cron(0 22 * * ? *)") // 10pm night time
+	startupSchedule := utils.GetenvDefault("KARPENTER_NODEPOOL_STARTUP_SCHEDULE", "cron(0 7 * * ? *)")    // 7am morning time
+	timezone := utils.GetenvDefault("KARPENTER_SCHEDULE_TIMEZONE", "Australia/Sydney")                    // Yes I'm in Sydney - Adjust to your needs.
 
 	// Create IAM role for EventBridge Scheduler
 	schedulerRole := awsiam.NewRole(stack, jsii.String("SchedulerRole"), &awsiam.RoleProps{
@@ -105,11 +106,26 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	})
 
 	awsscheduler.NewCfnSchedule(stack, jsii.String("ShutdownSchedule"), &awsscheduler.CfnScheduleProps{
-		ScheduleExpression:         jsii.String(schedule),
+		ScheduleExpression:         jsii.String(shutdownSchedule),
 		ScheduleExpressionTimezone: jsii.String(timezone),
 		Target: &awsscheduler.CfnSchedule_TargetProperty{
 			Arn:     function.FunctionArn(),
 			RoleArn: schedulerRole.RoleArn(),
+			Input:   jsii.String(`{"Action": "shutdown"}`),
+		},
+		FlexibleTimeWindow: &awsscheduler.CfnSchedule_FlexibleTimeWindowProperty{
+			Mode:                   jsii.String("FLEXIBLE"),
+			MaximumWindowInMinutes: jsii.Number(10),
+		},
+	})
+
+	awsscheduler.NewCfnSchedule(stack, jsii.String("StartupSchedule"), &awsscheduler.CfnScheduleProps{
+		ScheduleExpression:         jsii.String(startupSchedule),
+		ScheduleExpressionTimezone: jsii.String(timezone),
+		Target: &awsscheduler.CfnSchedule_TargetProperty{
+			Arn:     function.FunctionArn(),
+			RoleArn: schedulerRole.RoleArn(),
+			Input:   jsii.String(`{"Action": "startup"}`),
 		},
 		FlexibleTimeWindow: &awsscheduler.CfnSchedule_FlexibleTimeWindowProperty{
 			Mode:                   jsii.String("FLEXIBLE"),

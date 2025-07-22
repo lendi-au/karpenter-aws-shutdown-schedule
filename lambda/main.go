@@ -9,8 +9,6 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/ec2"
-	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/edify42/karpenter-aws-shutdown-schedule/pkg/utils"
@@ -110,48 +108,8 @@ func handler(ctx context.Context, request events.CloudWatchEvent) error {
 	fmt.Printf("Simulating scaling down nodepool %s\n", nodePoolName)
 
 	// EC2 interaction
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(os.Getenv("AWS_REGION")))
-	if err != nil {
-		return fmt.Errorf("failed to create AWS session: %v", err)
-	}
-
-	ec2Svc := ec2.NewFromConfig(cfg)
-
-	shutdownTag := os.Getenv("SHUTDOWN_TAG")
-	if shutdownTag == "" {
-		return fmt.Errorf("SHUTDOWN_TAG environment variable not set")
-	}
-
-	input := &ec2.DescribeInstancesInput{
-		Filters: []types.Filter{
-			{
-				Name:   &shutdownTag,
-				Values: []string{"true"},
-			},
-		},
-	}
-
-	result, err := ec2Svc.DescribeInstances(ctx, input)
-	if err != nil {
-		return fmt.Errorf("failed to describe instances: %v", err)
-	}
-
-	var instanceIds []string
-	for _, reservation := range result.Reservations {
-		for _, instance := range reservation.Instances {
-			instanceIds = append(instanceIds, *instance.InstanceId)
-		}
-	}
-
-	if len(instanceIds) > 0 {
-		fmt.Printf("Terminating instances: %v\n", instanceIds)
-		terminateInput := &ec2.TerminateInstancesInput{
-			InstanceIds: instanceIds,
-		}
-		_, err := ec2Svc.TerminateInstances(ctx, terminateInput)
-		if err != nil {
-			return fmt.Errorf("failed to terminate instances: %v", err)
-		}
+	if err := ShutdownEC2Instances(ctx); err != nil {
+		return err
 	}
 
 	return nil

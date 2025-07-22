@@ -1,6 +1,8 @@
 # karpenter-aws-shutdown-schedule
 
-vibe-coded project which deploys an AWS lambda. As this is a golang package,
+Vibe-coded (mostly) project which deploys an AWS lambda.
+
+As this is a golang package,
 but cdk is usually javascript/typescript tools, it's better to have the cdk
 deployed globally like so:
 
