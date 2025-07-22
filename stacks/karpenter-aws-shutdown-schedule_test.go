@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"testing"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
@@ -11,6 +12,17 @@ import (
 func TestKarpenterAwsShutdownScheduleStack(t *testing.T) {
 	// GIVEN
 	app := awscdk.NewApp(nil)
+
+	// Set up environment variable for KARPENTER_NODEPOOL_NAME
+	originalNodepoolName := os.Getenv("KARPENTER_NODEPOOL_NAME")
+	defer func() {
+		if originalNodepoolName != "" {
+			os.Setenv("KARPENTER_NODEPOOL_NAME", originalNodepoolName)
+		} else {
+			os.Unsetenv("KARPENTER_NODEPOOL_NAME")
+		}
+	}()
+	os.Setenv("KARPENTER_NODEPOOL_NAME", "test-nodepool")
 
 	// WHEN
 	stack := NewKarpenterAwsShutdownScheduleStack(app, "MyStack", nil)
@@ -27,7 +39,7 @@ func TestKarpenterAwsShutdownScheduleStack(t *testing.T) {
 		},
 		"Environment": map[string]interface{}{
 			"Variables": map[string]interface{}{
-				"KARPENTER_NODEPOOL_NAME": jsii.String("default"),
+				"KARPENTER_NODEPOOL_NAME": jsii.String("test-nodepool"),
 				"KUBERNETES_SERVICE_HOST": jsii.String("https://k8s.api"),
 				"KUBERNETES_CLUSTER_NAME": jsii.String("dummy"),
 			},
@@ -74,6 +86,35 @@ func TestKarpenterAwsShutdownScheduleStack(t *testing.T) {
 					"Effect":    jsii.String("Allow"),
 					"Principal": map[string]interface{}{"Service": jsii.String("scheduler.amazonaws.com")},
 				},
+			},
+		},
+	})
+}
+
+func TestKarpenterAwsShutdownScheduleStackDefaultNodepoolName(t *testing.T) {
+	// GIVEN
+	app := awscdk.NewApp(nil)
+
+	// Ensure KARPENTER_NODEPOOL_NAME is not set
+	originalNodepoolName := os.Getenv("KARPENTER_NODEPOOL_NAME")
+	defer func() {
+		if originalNodepoolName != "" {
+			os.Setenv("KARPENTER_NODEPOOL_NAME", originalNodepoolName)
+		}
+	}()
+	os.Unsetenv("KARPENTER_NODEPOOL_NAME")
+
+	// WHEN
+	stack := NewKarpenterAwsShutdownScheduleStack(app, "MyStack", nil)
+
+	// THEN
+	template := assertions.Template_FromStack(stack, nil)
+
+	// Assert Lambda Function uses default nodepool name when env var is not set
+	template.HasResourceProperties(jsii.String("AWS::Lambda::Function"), map[string]interface{}{
+		"Environment": map[string]interface{}{
+			"Variables": map[string]interface{}{
+				"KARPENTER_NODEPOOL_NAME": jsii.String("default"),
 			},
 		},
 	})
