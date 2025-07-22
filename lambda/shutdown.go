@@ -1,4 +1,3 @@
-
 package main
 
 import (
@@ -9,13 +8,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
+	"github.com/aws/jsii-runtime-go"
 )
 
 // ShutdownEC2Instances terminates EC2 instances with a specific tag.
 func ShutdownEC2Instances(ctx context.Context) error {
-	shutdownTag := os.Getenv("SHUTDOWN_TAG")
+	ec2NodeTagKey := "tag:karpenter.sh/nodepool"
+	shutdownTag := os.Getenv("KARPENTER_NODEPOOL_NAME")
 	if shutdownTag == "" {
-		return fmt.Errorf("SHUTDOWN_TAG environment variable not set")
+		return fmt.Errorf("KARPENTER_NODEPOOL_NAME environment variable not set")
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(os.Getenv("AWS_REGION")))
@@ -28,8 +29,8 @@ func ShutdownEC2Instances(ctx context.Context) error {
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{
 			{
-				Name:   &shutdownTag,
-				Values: []string{"true"},
+				Name:   jsii.String(ec2NodeTagKey),
+				Values: []string{shutdownTag},
 			},
 		},
 	}
@@ -55,6 +56,8 @@ func ShutdownEC2Instances(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to terminate instances: %v", err)
 		}
+	} else {
+		fmt.Printf("Found no matching ec2 instances for filter %s", shutdownTag)
 	}
 
 	return nil
