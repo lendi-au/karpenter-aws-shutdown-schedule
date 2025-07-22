@@ -55,6 +55,12 @@ func handler(ctx context.Context, request ActionEvent) error {
 		}
 
 		fmt.Printf("Successfully updated nodepool %s to set cpu limit to 0\n", nodePoolName)
+
+		// Delete all nodeclaims with label karpenter.sh/nodepool=spot-nodes
+		fmt.Println("Deleting spot nodeclaims...")
+		if err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName); err != nil {
+			return fmt.Errorf("failed to delete spot nodeclaims: %v", err)
+		}
 	case "startup":
 		fmt.Printf("Simulating scale up of nodepool %s\n", nodePoolName)
 		cpuLimit := os.Getenv("KARPENTER_NODEPOOL_LIMITS_CPU")
