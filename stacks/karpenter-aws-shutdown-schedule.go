@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
@@ -72,7 +73,13 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	}
 	fmt.Println("Current working directory: ", cwd)
 
-	buildPath := fmt.Sprintf("%s/build", cwd)
+	// Check if we're in the stacks directory (during testing) or root directory (during deployment)
+	var buildPath string
+	if filepath.Base(cwd) == "stacks" {
+		buildPath = "../build"
+	} else {
+		buildPath = "./build"
+	}
 
 	fmt.Println("Build path: ", buildPath)
 
