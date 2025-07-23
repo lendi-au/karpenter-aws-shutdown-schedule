@@ -9,7 +9,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-func deleteSpotNodeclaims(ctx context.Context, dynamicClient *dynamic.DynamicClient, nodePoolName string) error {
+func deleteSpotNodeclaims(ctx context.Context, dynamicClient dynamic.Interface, nodePoolName string) error {
 	nodeClaimGVR := schema.GroupVersionResource{
 		Group:    "karpenter.sh",
 		Version:  "v1",

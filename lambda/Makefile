@@ -5,7 +5,10 @@ build:
 	mkdir -p ../build/
 	mv bootstrap ../build/
 
+test:
+	go test -v ./...
+
 clean:
 	rm -rf bootstrap ../build
 
-.PHONY: build clean
+.PHONY: build test clean
