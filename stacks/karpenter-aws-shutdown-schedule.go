@@ -5,8 +5,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/aws/aws-cdk-go/awscdk/v2"
+	"github.com/aws/aws-cdk-go/awscdk/v2/awsec2"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsiam"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awslambda"
 	"github.com/aws/aws-cdk-go/awscdk/v2/awsscheduler"
@@ -83,14 +85,73 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 
 	fmt.Println("Build path: ", buildPath)
 
+	// VPC Configuration
+	// Environment variables:
+	// KARPENTER_VPC_ID=vpc-xxxxx (mandatory for VPC config)
+	// KARPENTER_SUBNET=subnet-xxxxx (mandatory for VPC config, supports comma-separated list)
+	// KARPENTER_SECURITY_GROUP=sg-xxxxx (optional, creates new SG if not provided)
+	var vpcConfig *awsec2.SubnetSelection
+	var securityGroups *[]awsec2.ISecurityGroup
+	vpcId := os.Getenv("KARPENTER_VPC_ID")
+	subnetId := os.Getenv("KARPENTER_SUBNET")
+	securityGroupId := os.Getenv("KARPENTER_SECURITY_GROUP")
+
+	if vpcId != "" && subnetId != "" {
+		fmt.Printf("Configuring Lambda with VPC: %s, Subnet: %s\n", vpcId, subnetId)
+		
+		// Import existing VPC
+		vpc := awsec2.Vpc_FromLookup(stack, jsii.String("ExistingVPC"), &awsec2.VpcLookupOptions{
+			VpcId: jsii.String(vpcId),
+		})
+
+		// Parse subnet IDs (support comma-separated list)
+		subnetIds := strings.Split(subnetId, ",")
+		var subnets []awsec2.ISubnet
+		for i, subId := range subnetIds {
+			subId = strings.TrimSpace(subId)
+			subnet := awsec2.Subnet_FromSubnetId(stack, jsii.String(fmt.Sprintf("ExistingSubnet%d", i)), jsii.String(subId))
+			subnets = append(subnets, subnet)
+		}
+
+		// Handle Security Group
+		var sgs []awsec2.ISecurityGroup
+		if securityGroupId != "" {
+			fmt.Printf("Using existing security group: %s\n", securityGroupId)
+			// Import existing security group
+			existingSG := awsec2.SecurityGroup_FromSecurityGroupId(stack, jsii.String("ExistingSecurityGroup"), jsii.String(securityGroupId), &awsec2.SecurityGroupImportOptions{})
+			sgs = append(sgs, existingSG)
+		} else {
+			fmt.Println("Creating new security group with no inbound rules and open egress")
+			// Create new security group with no inbound rules and open egress
+			newSG := awsec2.NewSecurityGroup(stack, jsii.String("LambdaSecurityGroup"), &awsec2.SecurityGroupProps{
+				Vpc:               vpc,
+				Description:       jsii.String("Security group for Karpenter Lambda function"),
+				SecurityGroupName: jsii.String(fmt.Sprintf("%s-sg", name)),
+				AllowAllOutbound:  jsii.Bool(true), // Open egress rules
+			})
+			// Note: By default, CDK security groups have no inbound rules, so we don't need to explicitly remove them
+			sgs = append(sgs, newSG)
+		}
+
+		vpcConfig = &awsec2.SubnetSelection{Subnets: &subnets}
+		securityGroups = &sgs
+
+		// Add VPC execution permissions to the Lambda role if we created it
+		if LambdaRoleArn == "" {
+			lambdaRole.AddManagedPolicy(awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("service-role/AWSLambdaVPCAccessExecutionRole")))
+		}
+	}
+
 	functionProps = &awslambda.FunctionProps{
-		Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
-		FunctionName: jsii.String(name),
-		Architecture: arch,
-		Handler:      jsii.String("main"),
-		Code:         awslambda.Code_FromAsset(jsii.String(buildPath), nil),
-		Environment:  &envMap,
-		Role:         lambdaRole, // adds custom role to lambda
+		Runtime:         awslambda.Runtime_PROVIDED_AL2023(),
+		FunctionName:    jsii.String(name),
+		Architecture:    arch,
+		Handler:         jsii.String("main"),
+		Code:            awslambda.Code_FromAsset(jsii.String(buildPath), nil),
+		Environment:     &envMap,
+		Role:            lambdaRole,     // adds custom role to lambda
+		VpcSubnets:      vpcConfig,      // VPC subnet configuration (nil if not configured)
+		SecurityGroups:  securityGroups, // Security groups (nil if not configured)
 	}
 
 	function := awslambda.NewFunction(stack, jsii.String(name), functionProps)

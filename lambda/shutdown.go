@@ -8,7 +8,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
-	"github.com/aws/jsii-runtime-go"
 )
 
 // ShutdownEC2Instances terminates EC2 instances with a specific tag.
@@ -29,7 +28,7 @@ func ShutdownEC2Instances(ctx context.Context) error {
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{
 			{
-				Name:   jsii.String(ec2NodeTagKey),
+				Name:   &ec2NodeTagKey,
 				Values: []string{shutdownTag},
 			},
 		},

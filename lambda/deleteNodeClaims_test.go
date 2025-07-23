@@ -15,34 +15,34 @@ import (
 
 func TestDeleteSpotNodeclaimsNoItems(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Create a fake dynamic client with custom list kinds
 	scheme := runtime.NewScheme()
-	fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme, 
+	fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme,
 		map[schema.GroupVersionResource]string{
 			{Group: "karpenter.sh", Version: "v1", Resource: "nodeclaims"}: "NodeClaimList",
 		})
-	
+
 	// Convert to interface type
 	var dynamicClient dynamic.Interface = fakeDynamicClient
-	
+
 	nodePoolName := "test-pool"
 	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName)
-	
+
 	// Should succeed with no items to delete
 	assert.NoError(t, err)
 }
 
 func TestDeleteSpotNodeclaimsWithItems(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Create a fake nodeclaim object
 	nodeClaimGVR := schema.GroupVersionResource{
 		Group:    "karpenter.sh",
 		Version:  "v1",
 		Resource: "nodeclaims",
 	}
-	
+
 	nodeclaim := &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "karpenter.sh/v1",
@@ -55,7 +55,7 @@ func TestDeleteSpotNodeclaimsWithItems(t *testing.T) {
 			},
 		},
 	}
-	
+
 	// Create a fake dynamic client with custom list kinds
 	scheme := runtime.NewScheme()
 	fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme,
@@ -63,16 +63,16 @@ func TestDeleteSpotNodeclaimsWithItems(t *testing.T) {
 			{Group: "karpenter.sh", Version: "v1", Resource: "nodeclaims"}: "NodeClaimList",
 		},
 		nodeclaim)
-	
+
 	// Convert to interface type
 	var dynamicClient dynamic.Interface = fakeDynamicClient
-	
+
 	nodePoolName := "test-pool"
 	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName)
-	
+
 	// Should succeed
 	assert.NoError(t, err)
-	
+
 	// Verify the nodeclaim was deleted by trying to list it
 	listResult, err := dynamicClient.Resource(nodeClaimGVR).List(ctx, metav1.ListOptions{
 		LabelSelector: "karpenter.sh/nodepool=test-pool",
