@@ -92,15 +92,16 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	// KARPENTER_SECURITY_GROUP=sg-xxxxx (optional, creates new SG if not provided)
 	var vpcConfig *awsec2.SubnetSelection
 	var securityGroups *[]awsec2.ISecurityGroup
+	var vpc awsec2.IVpc
 	vpcId := os.Getenv("KARPENTER_VPC_ID")
 	subnetId := os.Getenv("KARPENTER_SUBNET")
 	securityGroupId := os.Getenv("KARPENTER_SECURITY_GROUP")
 
 	if vpcId != "" && subnetId != "" {
 		fmt.Printf("Configuring Lambda with VPC: %s, Subnet: %s\n", vpcId, subnetId)
-		
+
 		// Import existing VPC
-		vpc := awsec2.Vpc_FromLookup(stack, jsii.String("ExistingVPC"), &awsec2.VpcLookupOptions{
+		vpc = awsec2.Vpc_FromLookup(stack, jsii.String("ExistingVPC"), &awsec2.VpcLookupOptions{
 			VpcId: jsii.String(vpcId),
 		})
 
@@ -142,16 +143,32 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		}
 	}
 
-	functionProps = &awslambda.FunctionProps{
-		Runtime:         awslambda.Runtime_PROVIDED_AL2023(),
-		FunctionName:    jsii.String(name),
-		Architecture:    arch,
-		Handler:         jsii.String("main"),
-		Code:            awslambda.Code_FromAsset(jsii.String(buildPath), nil),
-		Environment:     &envMap,
-		Role:            lambdaRole,     // adds custom role to lambda
-		VpcSubnets:      vpcConfig,      // VPC subnet configuration (nil if not configured)
-		SecurityGroups:  securityGroups, // Security groups (nil if not configured)
+	if vpcConfig != nil && securityGroups != nil {
+		functionProps = &awslambda.FunctionProps{
+			Runtime:           awslambda.Runtime_PROVIDED_AL2023(),
+			FunctionName:      jsii.String(name),
+			Architecture:      arch,
+			Handler:           jsii.String("main"),
+			Code:              awslambda.Code_FromAsset(jsii.String(buildPath), nil),
+			Environment:       &envMap,
+			Role:              lambdaRole,
+			Vpc:               vpc,
+			VpcSubnets:        vpcConfig,
+			SecurityGroups:    securityGroups,
+			AllowPublicSubnet: jsii.Bool(true),
+			Timeout:           awscdk.Duration_Minutes(jsii.Number(5)),
+		}
+	} else {
+		functionProps = &awslambda.FunctionProps{
+			Runtime:      awslambda.Runtime_PROVIDED_AL2023(),
+			FunctionName: jsii.String(name),
+			Architecture: arch,
+			Handler:      jsii.String("main"),
+			Code:         awslambda.Code_FromAsset(jsii.String(buildPath), nil),
+			Environment:  &envMap,
+			Role:         lambdaRole,
+			Timeout:      awscdk.Duration_Minutes(jsii.Number(5)),
+		}
 	}
 
 	function := awslambda.NewFunction(stack, jsii.String(name), functionProps)
@@ -230,5 +247,8 @@ func main() {
 }
 
 func env() *awscdk.Environment {
-	return nil
+	return &awscdk.Environment{
+		Account: jsii.String(os.Getenv("CDK_DEFAULT_ACCOUNT")),
+		Region:  jsii.String(os.Getenv("CDK_DEFAULT_REGION")),
+	}
 }

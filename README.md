@@ -1,83 +1,135 @@
-# karpenter-aws-shutdown-schedule
+# Karpenter AWS Shutdown Schedule
 
-Vibe-coded (mostly) project which deploys an AWS lambda.
+A Go-based AWS CDK project that automatically manages Karpenter nodepools on a schedule to optimize AWS costs by shutting down EC2 instances during off-hours and restarting them during business hours.
 
-As this is a golang package,
-but cdk is usually javascript/typescript tools, it's better to have the cdk
-deployed globally like so:
+## Overview
 
-```bash
+This project deploys an AWS Lambda function that:
+- **Shuts down** Karpenter nodepools by setting CPU limits to 0, deleting associated nodeclaims, and terminating EC2 instances
+- **Starts up** Karpenter nodepools by restoring CPU limits to allow scaling
+- Operates on a configurable schedule using AWS EventBridge Scheduler with timezone support
 
-npm install --global aws-cdk
+## Architecture
 
-```
+The solution consists of:
+- **Lambda Function** (`lambda/`): Go-based handler that interacts with Kubernetes API and AWS EC2
+- **CDK Stack** (`stacks/`): Infrastructure as Code to deploy Lambda, IAM roles, and EventBridge schedules
+- **Kubernetes Integration**: Uses dynamic client to manage Karpenter nodepools and nodeclaims
+- **AWS Integration**: Manages EC2 instances tagged with Karpenter nodepool information
 
-Important to note that you need to have running karpenter pods for the startup
-behaviour to function (where I'm using this there's a separate Auto Scaling
-group for this).
+## Prerequisites
 
-Also the intent of this function is to be a 1:1 mapping with a specific
-nodegroup in k8s.
+- AWS CDK CLI installed globally: `npm install --global aws-cdk`
+- Go 1.24+ for building the Lambda function
+- AWS credentials configured
+- EKS cluster with Karpenter installed
+- Appropriate IAM permissions for Lambda to access EKS and EC2
 
-**This function needs access to the k8s API to update the nodepool settings**
+## Configuration
 
-## shutdown behaviour
-
-1. Set the configured node pools to 0
-2. Find all nodes from the node pool and force the drain
-3. Terminate all EC2 instances via AWS API
-
-## startup behaviour
-
-The startup behaviour is much simpler, with karpenter setting the desired node number depending on the environment variable set.
-
-## build
-
-
-``
-If defined, we use this role by the lambda instead of creating one.
-
-Set on the node group when it turns on again. This is done at build time as we
-setup the AWS Eventbridge schedule.
+### Build-time Environment Variables
 
 ```bash
-# cat .env
-BUILD_ARCH=amd64 # build amd64 golang binary instead
-KUBERNETES_SERVICE_HOST="https://api-server.k8s.io" # k8s master API endpoint
-KUBERNETES_CLUSTER_NAME="my-cluster"
-KARPENTER_NODEPOOL_NAME="KARPENTER_DYNAMIC" # karpenter node pool name
-KARPENTER_EXTRA_SHUTDOWN_TAG= # optional extra tag to search for karpenter nodes. checks only for existence.
-KARPENTER_NODEPOOL_LIMITS_CPU="1000" # number of CPU cores karpenter can scale up to when it turns on the nodes again
-KARPENTER_NODEPOOL_LIMITS_MEMORY="1000Gi" # number of memory karpenter should
+# Architecture and cluster configuration
+BUILD_ARCH=amd64                                    # Lambda architecture (arm64 or amd64)
+KUBERNETES_SERVICE_HOST="https://api-server.k8s.io" # EKS API server endpoint
+KUBERNETES_CLUSTER_NAME="my-cluster"               # EKS cluster name
+KARPENTER_NODEPOOL_NAME="my-nodepool"              # Target Karpenter nodepool name
 
+# Resource limits for startup
+KARPENTER_NODEPOOL_LIMITS_CPU="1000"               # CPU limit when scaling up
+KARPENTER_NODEPOOL_LIMITS_MEMORY="1000Gi"          # Memory limit when scaling up
+
+# Optional: Additional EC2 instance filtering
+KARPENTER_EXTRA_SHUTDOWN_TAG="custom-tag"          # Extra tag for EC2 instance filtering
 ```
 
-## deploy
-
-From the root directory, run `cdk deploy`. You should setup these environment
-variables so that the lambda has the right config at runtime (not the default
-values) to target what it needs:
+### Deployment Environment Variables
 
 ```bash
+# VPC Configuration (optional - for private EKS clusters)
+KARPENTER_VPC_ID=vpc-xxxxxxxxx                     # VPC ID for Lambda
+KARPENTER_SUBNET=subnet-xxxxxxxxx                  # Subnet ID(s), comma-separated
+KARPENTER_SECURITY_GROUP=sg-xxxxxxxxx              # Security group ID (optional)
 
-cat .env
-KARPENTER_VPC_ID=vpc-03434234234 # specify a VPC ID, subnet + security group if your EKS cluster is internal
-KARPENTER_SUBNET=subnet-34234234
-KARPENTER_SECURITY_GROUP=sg-1232323
-LAMBDA_ROLE_ARN=arn:aws:iam::2231231231231:role/my-custom-karpenter-role # custom lambda role predefined and not created here
+# IAM Configuration (optional)
+LAMBDA_ROLE_ARN=arn:aws:iam::xxxx:role/my-role    # Pre-existing Lambda execution role
 
-KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE="cron(0 22 * * ? *)" # When to shutdown the lambda (10pm every day)
-KARPENTER_NODEPOOL_STARTUP_SCHEDULE="cron(0 7 ? * MON-FRI *)" # When the lambda should run and start things UP (7:00am Monday to Friday)
-KARPENTER_SCHEDULE_TIMEZONE="Australia/Sydney" # Timezone - make it useful!
+# Schedule Configuration
+KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE="cron(0 22 * * ? *)"    # Shutdown time (10 PM daily)
+KARPENTER_NODEPOOL_STARTUP_SCHEDULE="cron(0 7 ? * MON-FRI *)" # Startup time (7 AM weekdays)
+KARPENTER_SCHEDULE_TIMEZONE="Australia/Sydney"               # Schedule timezone
 ```
 
-## cdk init stuff
+## How It Works
 
-The `cdk.json` file tells the CDK toolkit how to execute your app.
+### Shutdown Process (`lambda/main.go:44-63`)
+1. Sets the target nodepool's CPU limit to "0" via Kubernetes API
+2. Deletes all nodeclaims associated with the nodepool (`lambda/deleteNodeClaims.go`)
+3. Terminates all EC2 instances tagged with the nodepool name (`lambda/shutdown.go`)
 
-## Useful commands
+### Startup Process (`lambda/main.go:64-80`)
+1. Restores the nodepool's CPU limit to the configured value
+2. Karpenter automatically scales up nodes based on pending workloads
 
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk synth`       emits the synthesized CloudFormation template
- * `go test`         run unit tests
+### AWS Integration (`lambda/client.go`)
+- Uses AWS IAM authenticator to generate EKS tokens
+- Creates Kubernetes dynamic client for API operations
+- Supports both public and VPC-based EKS clusters
+
+## Build and Deploy
+
+### Building the Lambda Function
+
+```bash
+make build
+```
+
+This builds the Go Lambda function and places the binary in the `build/` directory.
+
+### Deploying the Infrastructure
+
+```bash
+make deploy
+```
+
+This builds the Lambda function and deploys the CDK stack to your configured AWS account/region.
+
+### Running Tests
+
+```bash
+make test
+```
+
+Runs the Go unit tests with necessary environment variables set.
+
+## IAM Permissions
+
+The Lambda function requires the following AWS permissions:
+- `ec2:DescribeInstances`
+- `ec2:TerminateInstances` 
+- `eks:DescribeCluster`
+
+For Kubernetes access, the Lambda execution role must be added to the EKS cluster's aws-auth ConfigMap or have appropriate RBAC permissions.
+
+## Monitoring
+
+The Lambda function logs all operations to CloudWatch Logs. Key log messages include:
+- Nodepool scaling operations
+- Nodeclaim deletion results
+- EC2 instance termination status
+- Authentication and API call results
+
+## Cost Optimization
+
+This solution helps reduce AWS costs by:
+- Automatically terminating idle EC2 instances during off-hours
+- Preventing unnecessary compute charges during nights and weekends
+- Allowing precise control over when workloads are available
+
+## Useful CDK Commands
+
+- `cdk deploy` - Deploy the stack to your AWS account/region
+- `cdk diff` - Compare deployed stack with current state  
+- `cdk synth` - Generate CloudFormation template
+- `cdk destroy` - Remove the deployed stack
