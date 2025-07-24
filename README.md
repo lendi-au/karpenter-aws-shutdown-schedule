@@ -5,9 +5,10 @@ A Go-based AWS CDK project that automatically manages Karpenter nodepools on a s
 ## Overview
 
 This project deploys an AWS Lambda function that:
-- **Shuts down** Karpenter nodepools by setting CPU limits to 0, deleting associated nodeclaims, and terminating EC2 instances.
-- **Starts up** Karpenter nodepools by restoring CPU limits to allow scaling.
-- Operates on a configurable schedule using AWS EventBridge Scheduler with timezone support.
+
+- **Shuts down** Karpenter nodepools by setting CPU limits to 0, deleting associated nodeclaims, and terminating EC2 instances
+- **Starts up** Karpenter nodepools by restoring CPU limits to allow scaling
+- Operates on a configurable schedule using AWS EventBridge Scheduler with timezone support
 
 ## Architecture
 
