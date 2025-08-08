@@ -134,10 +134,86 @@ metadata:
   namespace: kube-system
 data:
   mapRoles: |
-    - rolearn: <your-lambda-role-arn>
-      username: karpenter-shutdown-lambda
-      groups:
-        - system:masters
+  (...) # other elements
+  - "groups":
+    - "edit"
+    "rolearn": "arn:aws:iam::01234567890:role/karpenter-ec2-instance-stop-start"
+    "username": "karpenter_ec2_instance_stop_start"
+
+```
+
+A cluster role and cluster role binding is necessary to tie in the IAM Role to
+a k8s identity:
+
+```yaml
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: karpenter-lambda-clusterrole
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+  - delete
+- apiGroups:
+  - ""
+  resources:
+  - pods/eviction
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+- apiGroups:
+  - ""
+  resources:
+  - nodes/status
+  verbs:
+  - patch
+- apiGroups:
+  - karpenter.sh
+  resources:
+  - nodepools
+  verbs:
+  - get
+  - list
+  - watch
+  - update
+  - patch
+- apiGroups:
+  - karpenter.sh
+  resources:
+  - nodeclaims
+  verbs:
+  - get
+  - list
+  - watch
+  - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: karpenter-lambda-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: karpenter-lambda-clusterrole
+subjects:
+- apiGroup: rbac.authorization.k8s.io
+  kind: User
+  name: karpenter_ec2_instance_stop_start
+  namespace: default
 ```
 
 ## Troubleshooting
