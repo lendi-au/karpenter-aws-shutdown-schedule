@@ -185,7 +185,7 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	shutdownSchedule := utils.GetenvDefault("KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE", "cron(0 22 * * ? *)") // 10pm night time
 	startupSchedule := utils.GetenvDefault("KARPENTER_NODEPOOL_STARTUP_SCHEDULE", "cron(0 7 * * ? *)")    // 7am morning time
 	timezone := utils.GetenvDefault("KARPENTER_SCHEDULE_TIMEZONE", "Australia/Sydney")                    // Yes I'm in Sydney - Adjust to your needs.
-
+	state := utils.GetenvDefault("KARPENTER_SCHEDULE_FUNCTION_STATE", "ENABLED")
 	// Create IAM role for EventBridge Scheduler
 	schedulerRole := awsiam.NewRole(stack, jsii.String("SchedulerRole"), &awsiam.RoleProps{
 		AssumedBy: awsiam.NewServicePrincipal(jsii.String("scheduler.amazonaws.com"), nil),
@@ -213,6 +213,7 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 			Mode:                   jsii.String("FLEXIBLE"),
 			MaximumWindowInMinutes: jsii.Number(10),
 		},
+		State: &state,
 	})
 
 	awsscheduler.NewCfnSchedule(stack, jsii.String("StartupSchedule"), &awsscheduler.CfnScheduleProps{
@@ -227,6 +228,7 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 			Mode:                   jsii.String("FLEXIBLE"),
 			MaximumWindowInMinutes: jsii.Number(10),
 		},
+		State: &state,
 	})
 
 	return stack

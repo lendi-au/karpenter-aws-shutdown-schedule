@@ -67,6 +67,7 @@ KARPENTER_SECURITY_GROUP="<your-security-group-id>" # Optional
 
 # (Optional) Provide a pre-existing IAM role for the Lambda function.
 LAMBDA_ROLE_ARN="arn:aws:iam::<your-account-id>:role/<your-lambda-role>"
+
 ```
 
 #### Runtime Configuration
@@ -80,6 +81,9 @@ KARPENTER_NODEPOOL_STARTUP_SCHEDULE="cron(0 7 ? * MON-FRI *)" # 7 AM on weekdays
 
 # The timezone for the schedules.
 KARPENTER_SCHEDULE_TIMEZONE="Australia/Sydney"
+
+# Allows us to toggle on/off the AWS Cloudwatch Event schedule
+KARPENTER_SCHEDULE_FUNCTION_STATE="ENABLED"
 ```
 
 ### 3. Build and Deploy
