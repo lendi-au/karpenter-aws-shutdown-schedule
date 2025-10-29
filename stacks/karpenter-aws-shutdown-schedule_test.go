@@ -16,7 +16,7 @@ func TestKarpenterAwsShutdownScheduleStack(t *testing.T) {
 
 	// Store and clear all relevant environment variables
 	envVars := []string{
-		"KARPENTER_NODEPOOL_NAME", 
+		"KARPENTER_NODEPOOLS", 
 		"KUBERNETES_SERVICE_HOST", 
 		"KUBERNETES_CLUSTER_NAME",
 		"KARPENTER_VPC_ID",
@@ -40,7 +40,7 @@ func TestKarpenterAwsShutdownScheduleStack(t *testing.T) {
 	}()
 
 	// Set test values
-	os.Setenv("KARPENTER_NODEPOOL_NAME", "test-nodepool")
+	os.Setenv("KARPENTER_NODEPOOLS", "test-nodepool")
 
 	// WHEN
 	stack := NewKarpenterAwsShutdownScheduleStack(app, "MyStack", nil)
@@ -57,7 +57,7 @@ func TestKarpenterAwsShutdownScheduleStack(t *testing.T) {
 		},
 		"Environment": map[string]interface{}{
 			"Variables": map[string]interface{}{
-				"KARPENTER_NODEPOOL_NAME": jsii.String("test-nodepool"),
+				"KARPENTER_NODEPOOLS": jsii.String("test-nodepool"),
 				"KUBERNETES_SERVICE_HOST": jsii.String("https://k8s.api"),
 				"KUBERNETES_CLUSTER_NAME": jsii.String("dummy"),
 			},
@@ -115,7 +115,7 @@ func TestKarpenterAwsShutdownScheduleStackDefaultNodepoolName(t *testing.T) {
 
 	// Store and clear all relevant environment variables
 	envVars := []string{
-		"KARPENTER_NODEPOOL_NAME", 
+		"KARPENTER_NODEPOOLS", 
 		"KUBERNETES_SERVICE_HOST", 
 		"KUBERNETES_CLUSTER_NAME",
 		"KARPENTER_VPC_ID",
@@ -138,7 +138,7 @@ func TestKarpenterAwsShutdownScheduleStackDefaultNodepoolName(t *testing.T) {
 		}
 	}()
 
-	// Don't set KARPENTER_NODEPOOL_NAME to test default behavior
+	// Don't set KARPENTER_NODEPOOLS to test default behavior
 
 	// WHEN
 	stack := NewKarpenterAwsShutdownScheduleStack(app, "MyStack", nil)
@@ -150,7 +150,7 @@ func TestKarpenterAwsShutdownScheduleStackDefaultNodepoolName(t *testing.T) {
 	template.HasResourceProperties(jsii.String("AWS::Lambda::Function"), map[string]interface{}{
 		"Environment": map[string]interface{}{
 			"Variables": map[string]interface{}{
-				"KARPENTER_NODEPOOL_NAME": jsii.String("default"),
+				"KARPENTER_NODEPOOLS": jsii.String("default"),
 			},
 		},
 	})
@@ -166,7 +166,7 @@ func TestKarpenterAwsShutdownScheduleStackWithVPCExistingSecurityGroup(t *testin
 
 	// Set up environment variables for VPC configuration with existing security group
 	envVars := map[string]string{
-		"KARPENTER_NODEPOOL_NAME":   "test-nodepool",
+		"KARPENTER_NODEPOOLS":   "test-nodepool",
 		"KARPENTER_VPC_ID":          "vpc-12345678",
 		"KARPENTER_SUBNET":          "subnet-87654321",
 		"KARPENTER_SECURITY_GROUP":  "sg-abcdef123",
@@ -356,7 +356,7 @@ func TestKarpenterAwsShutdownScheduleStackWithoutVPCConfiguration(t *testing.T) 
 	}
 	
 	// Set required env var
-	os.Setenv("KARPENTER_NODEPOOL_NAME", "test-nodepool")
+	os.Setenv("KARPENTER_NODEPOOLS", "test-nodepool")
 
 	defer func() {
 		// Restore original values
@@ -365,7 +365,7 @@ func TestKarpenterAwsShutdownScheduleStackWithoutVPCConfiguration(t *testing.T) 
 				os.Setenv(envVar, originalValue)
 			}
 		}
-		os.Unsetenv("KARPENTER_NODEPOOL_NAME")
+		os.Unsetenv("KARPENTER_NODEPOOLS")
 	}()
 
 	// WHEN
@@ -380,7 +380,7 @@ func TestKarpenterAwsShutdownScheduleStackWithoutVPCConfiguration(t *testing.T) 
 		"Runtime": jsii.String("provided.al2023"),
 		"Environment": map[string]interface{}{
 			"Variables": map[string]interface{}{
-				"KARPENTER_NODEPOOL_NAME": jsii.String("test-nodepool"),
+				"KARPENTER_NODEPOOLS": jsii.String("test-nodepool"),
 			},
 		},
 	})
@@ -444,21 +444,21 @@ func TestKarpenterAwsShutdownScheduleStackPartialVPCConfiguration(t *testing.T) 
 			originalVPC := os.Getenv("KARPENTER_VPC_ID")
 			originalSubnet := os.Getenv("KARPENTER_SUBNET")
 			originalSG := os.Getenv("KARPENTER_SECURITY_GROUP")
-			originalNodepool := os.Getenv("KARPENTER_NODEPOOL_NAME")
+			originalNodepool := os.Getenv("KARPENTER_NODEPOOLS")
 
 			defer func() {
 				// Restore original values
 				restoreEnvVar("KARPENTER_VPC_ID", originalVPC)
 				restoreEnvVar("KARPENTER_SUBNET", originalSubnet)
 				restoreEnvVar("KARPENTER_SECURITY_GROUP", originalSG)
-				restoreEnvVar("KARPENTER_NODEPOOL_NAME", originalNodepool)
+				restoreEnvVar("KARPENTER_NODEPOOLS", originalNodepool)
 			}()
 
 			// Set test values
 			setEnvVar("KARPENTER_VPC_ID", tc.vpcId)
 			setEnvVar("KARPENTER_SUBNET", tc.subnet)
 			setEnvVar("KARPENTER_SECURITY_GROUP", tc.securityGroup)
-			os.Setenv("KARPENTER_NODEPOOL_NAME", "test-nodepool")
+			os.Setenv("KARPENTER_NODEPOOLS", "test-nodepool")
 
 			if tc.shouldTriggerVPC {
 				// When both VPC ID and Subnet are provided, VPC configuration should be triggered

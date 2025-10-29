@@ -8,41 +8,33 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestShutdownEC2InstancesMissingEnvironment(t *testing.T) {
+func TestShutdownEC2InstancesMissingNodepools(t *testing.T) {
 	ctx := context.Background()
 
-	// Temporarily unset the environment variable
-	originalValue := os.Getenv("KARPENTER_NODEPOOL_NAME")
-	os.Unsetenv("KARPENTER_NODEPOOL_NAME")
-	defer func() {
-		if originalValue != "" {
-			os.Setenv("KARPENTER_NODEPOOL_NAME", originalValue)
-		}
-	}()
-
-	err := ShutdownEC2Instances(ctx)
+	// Test with empty nodepool names
+	err := ShutdownEC2Instances(ctx, []string{})
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "KARPENTER_NODEPOOL_NAME environment variable not set")
+	assert.Contains(t, err.Error(), "no nodepool names provided")
 }
 
-func TestShutdownEC2InstancesWithEnvironment(t *testing.T) {
+func TestShutdownEC2InstancesWithNodepools(t *testing.T) {
 	ctx := context.Background()
 
 	// Set up environment variables
-	os.Setenv("KARPENTER_NODEPOOL_NAME", "test-pool")
 	os.Setenv("AWS_REGION", "us-east-1")
 	defer func() {
-		os.Unsetenv("KARPENTER_NODEPOOL_NAME")
 		os.Unsetenv("AWS_REGION")
 	}()
 
-	err := ShutdownEC2Instances(ctx)
+	// Test with valid nodepool names
+	nodepools := []string{"test-pool-1", "test-pool-2"}
+	err := ShutdownEC2Instances(ctx, nodepools)
 
 	// In a test environment, the function may succeed if AWS config loads but no instances found
 	// or it may fail if AWS credentials are not available
-	// Either outcome is acceptable for this test - we just want to ensure the env var check passed
+	// Either outcome is acceptable for this test - we just want to ensure the nodepool check passed
 	if err != nil {
-		assert.NotContains(t, err.Error(), "KARPENTER_NODEPOOL_NAME environment variable not set")
+		assert.NotContains(t, err.Error(), "no nodepool names provided")
 	}
 }

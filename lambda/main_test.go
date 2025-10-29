@@ -20,11 +20,11 @@ func TestHandlerMissingEnvironmentVariable(t *testing.T) {
 	ctx := context.Background()
 
 	// Temporarily unset the environment variable
-	originalValue := os.Getenv("KARPENTER_NODEPOOL_NAME")
-	os.Unsetenv("KARPENTER_NODEPOOL_NAME")
+	originalValue := os.Getenv("KARPENTER_NODEPOOLS")
+	os.Unsetenv("KARPENTER_NODEPOOLS")
 	defer func() {
 		if originalValue != "" {
-			os.Setenv("KARPENTER_NODEPOOL_NAME", originalValue)
+			os.Setenv("KARPENTER_NODEPOOLS", originalValue)
 		}
 	}()
 
@@ -32,17 +32,17 @@ func TestHandlerMissingEnvironmentVariable(t *testing.T) {
 	err := handler(ctx, request)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "KARPENTER_NODEPOOL_NAME environment variable not set")
+	assert.Contains(t, err.Error(), "KARPENTER_NODEPOOLS environment variable not set")
 }
 
 func TestHandlerWithMockEnvironment(t *testing.T) {
 	// Set up environment variables for testing
-	os.Setenv("KARPENTER_NODEPOOL_NAME", "test-pool")
+	os.Setenv("KARPENTER_NODEPOOLS", "test-pool")
 	os.Setenv("KUBERNETES_CLUSTER_NAME", "test-cluster")
 	os.Setenv("KUBERNETES_SERVICE_HOST", "https://test.api")
 	os.Setenv("AWS_REGION", "us-east-1")
 	defer func() {
-		os.Unsetenv("KARPENTER_NODEPOOL_NAME")
+		os.Unsetenv("KARPENTER_NODEPOOLS")
 		os.Unsetenv("KUBERNETES_CLUSTER_NAME")
 		os.Unsetenv("KUBERNETES_SERVICE_HOST")
 		os.Unsetenv("AWS_REGION")
