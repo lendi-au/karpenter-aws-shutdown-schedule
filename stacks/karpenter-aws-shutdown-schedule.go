@@ -36,32 +36,83 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		arch = awslambda.Architecture_X86_64()
 	}
 
+	// ========================================================================
+	// IAM ROLE SETUP
+	// ========================================================================
+	// This section consolidates all IAM role and policy configuration for the Lambda function
+
 	LambdaRoleArn := os.Getenv("LAMBDA_ROLE_ARN")
+	vpcId := os.Getenv("KARPENTER_VPC_ID")
+	subnetId := os.Getenv("KARPENTER_SUBNET")
+	hasVpcConfig := vpcId != "" && subnetId != ""
 
 	var lambdaRole awsiam.IRole
-	var functionProps *awslambda.FunctionProps
 
 	if LambdaRoleArn != "" {
-		fmt.Printf("Found LAMBDA_ROLE_ARN: %s. Using this on lambda", LambdaRoleArn)
-		lambdaRole = awsiam.Role_FromRoleArn(stack, jsii.String("LambdaRoleArn"), jsii.String(LambdaRoleArn), &awsiam.FromRoleArnOptions{
-			// Set mutable to false unless you want to add policies to this role in CDK
+		// Using a pre-existing IAM role
+		fmt.Printf("Found LAMBDA_ROLE_ARN: %s. Using this role for the Lambda function.\n", LambdaRoleArn)
+		fmt.Println("NOTE: When using a custom IAM role, ensure it has the following permissions:")
+		fmt.Println("  - ec2:DescribeInstances")
+		fmt.Println("  - ec2:TerminateInstances")
+		fmt.Println("  - eks:DescribeCluster")
+		fmt.Println("  - CloudWatch Logs permissions (AWSLambdaBasicExecutionRole)")
+		if hasVpcConfig {
+			fmt.Println("  - VPC permissions (AWSLambdaVPCAccessExecutionRole)")
+		}
+		fmt.Println("  - The role must be mapped in your EKS cluster's aws-auth ConfigMap")
+
+		lambdaRole = awsiam.Role_FromRoleArn(stack, jsii.String("LambdaRole"), jsii.String(LambdaRoleArn), &awsiam.FromRoleArnOptions{
 			Mutable: jsii.Bool(false),
 		})
 	} else {
-		lambdaRole = awsiam.NewRole(stack, jsii.String("MyLambdaRole"), &awsiam.RoleProps{
-			RoleName:  jsii.String(name),
-			AssumedBy: awsiam.NewServicePrincipal(jsii.String("lambda.amazonaws.com"), nil),
-			ManagedPolicies: &[]awsiam.IManagedPolicy{
-				awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("service-role/AWSLambdaBasicExecutionRole")),
+		// Create a new IAM role with all necessary permissions
+		fmt.Println("Creating new IAM role for Lambda function with required permissions")
+
+		// Start with basic managed policies
+		managedPolicies := []awsiam.IManagedPolicy{
+			awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("service-role/AWSLambdaBasicExecutionRole")),
+		}
+
+		// Add VPC execution policy if VPC configuration is present
+		if hasVpcConfig {
+			fmt.Println("VPC configuration detected - adding VPC execution permissions")
+			managedPolicies = append(managedPolicies,
+				awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("service-role/AWSLambdaVPCAccessExecutionRole")))
+		}
+
+		lambdaRole = awsiam.NewRole(stack, jsii.String("LambdaRole"), &awsiam.RoleProps{
+			RoleName:        jsii.String(name),
+			AssumedBy:       awsiam.NewServicePrincipal(jsii.String("lambda.amazonaws.com"), nil),
+			ManagedPolicies: &managedPolicies,
+			InlinePolicies: &map[string]awsiam.PolicyDocument{
+				"EC2AndEKSPermissions": awsiam.NewPolicyDocument(&awsiam.PolicyDocumentProps{
+					Statements: &[]awsiam.PolicyStatement{
+						awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
+							Effect: awsiam.Effect_ALLOW,
+							Actions: jsii.Strings(
+								"ec2:DescribeInstances",
+								"ec2:TerminateInstances",
+								"eks:DescribeCluster",
+							),
+							Resources: jsii.Strings("*"),
+						}),
+					},
+				}),
 			},
 		})
+
+		fmt.Printf("Created IAM role: %s\n", name)
+		fmt.Println("IMPORTANT: Map this role in your EKS cluster's aws-auth ConfigMap with the appropriate permissions")
 	}
 
+	// ========================================================================
+	// LAMBDA ENVIRONMENT VARIABLES
+	// ========================================================================
 	nodepool := utils.GetenvDefault("KARPENTER_NODEPOOL_NAME", "default")
 	k8sHost := utils.GetenvDefault("KUBERNETES_SERVICE_HOST", "https://k8s.api")
 	clusterName := utils.GetenvDefault("KUBERNETES_CLUSTER_NAME", "dummy")
 	envMap := map[string]*string{
-		"KARPENTER_NODEPOOL_NAME": jsii.String(nodepool), // Replace with your NodePool name
+		"KARPENTER_NODEPOOL_NAME": jsii.String(nodepool),
 		"KUBERNETES_SERVICE_HOST": &k8sHost,
 		"KUBERNETES_CLUSTER_NAME": &clusterName,
 	}
@@ -69,6 +120,9 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		envMap["SHUTDOWN_TAG"] = jsii.String(os.Getenv("KARPENTER_EXTRA_SHUTDOWN_TAG"))
 	}
 
+	// ========================================================================
+	// BUILD PATH CONFIGURATION
+	// ========================================================================
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Fatal(err)
@@ -82,10 +136,11 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	} else {
 		buildPath = "./build"
 	}
-
 	fmt.Println("Build path: ", buildPath)
 
-	// VPC Configuration
+	// ========================================================================
+	// VPC CONFIGURATION
+	// ========================================================================
 	// Environment variables:
 	// KARPENTER_VPC_ID=vpc-xxxxx (mandatory for VPC config)
 	// KARPENTER_SUBNET=subnet-xxxxx (mandatory for VPC config, supports comma-separated list)
@@ -93,8 +148,6 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	var vpcConfig *awsec2.SubnetSelection
 	var securityGroups *[]awsec2.ISecurityGroup
 	var vpc awsec2.IVpc
-	vpcId := os.Getenv("KARPENTER_VPC_ID")
-	subnetId := os.Getenv("KARPENTER_SUBNET")
 	securityGroupId := os.Getenv("KARPENTER_SECURITY_GROUP")
 
 	if vpcId != "" && subnetId != "" {
@@ -136,12 +189,12 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 
 		vpcConfig = &awsec2.SubnetSelection{Subnets: &subnets}
 		securityGroups = &sgs
-
-		// Add VPC execution permissions to the Lambda role if we created it
-		if LambdaRoleArn == "" {
-			lambdaRole.AddManagedPolicy(awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("service-role/AWSLambdaVPCAccessExecutionRole")))
-		}
 	}
+
+	// ========================================================================
+	// LAMBDA FUNCTION CONFIGURATION
+	// ========================================================================
+	var functionProps *awslambda.FunctionProps
 
 	if vpcConfig != nil && securityGroups != nil {
 		functionProps = &awslambda.FunctionProps{
@@ -173,19 +226,14 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 
 	function := awslambda.NewFunction(stack, jsii.String(name), functionProps)
 
-	if LambdaRoleArn == "" {
-		// IAM Permissions as no role was set
-		function.AddToRolePolicy(awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
-			Actions:   jsii.Strings("ec2:DescribeInstances", "ec2:TerminateInstances", "eks:DescribeCluster"),
-			Resources: jsii.Strings("*"),
-		}))
-	}
-
-	// EventBridge Scheduler with timezone support
+	// ========================================================================
+	// EVENTBRIDGE SCHEDULER CONFIGURATION
+	// ========================================================================
 	shutdownSchedule := utils.GetenvDefault("KARPENTER_NODEPOOL_SHUTDOWN_SCHEDULE", "cron(0 22 * * ? *)") // 10pm night time
 	startupSchedule := utils.GetenvDefault("KARPENTER_NODEPOOL_STARTUP_SCHEDULE", "cron(0 7 * * ? *)")    // 7am morning time
 	timezone := utils.GetenvDefault("KARPENTER_SCHEDULE_TIMEZONE", "Australia/Sydney")                    // Yes I'm in Sydney - Adjust to your needs.
 	state := utils.GetenvDefault("KARPENTER_SCHEDULE_FUNCTION_STATE", "ENABLED")
+
 	// Create IAM role for EventBridge Scheduler
 	schedulerRole := awsiam.NewRole(stack, jsii.String("SchedulerRole"), &awsiam.RoleProps{
 		AssumedBy: awsiam.NewServicePrincipal(jsii.String("scheduler.amazonaws.com"), nil),
