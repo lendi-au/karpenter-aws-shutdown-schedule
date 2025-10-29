@@ -68,12 +68,8 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 		// Create a new IAM role with all necessary permissions
 		fmt.Println("Creating new IAM role for Lambda function with required permissions")
 
-		// Start with basic managed policies
-		managedPolicies := []awsiam.IManagedPolicy{
-			awsiam.ManagedPolicy_FromAwsManagedPolicyName(jsii.String("service-role/AWSLambdaBasicExecutionRole")),
-		}
-
 		// Add VPC execution policy if VPC configuration is present
+		var managedPolicies []awsiam.IManagedPolicy
 		if hasVpcConfig {
 			fmt.Println("VPC configuration detected - adding VPC execution permissions")
 			managedPolicies = append(managedPolicies,
@@ -85,7 +81,7 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 			AssumedBy:       awsiam.NewServicePrincipal(jsii.String("lambda.amazonaws.com"), nil),
 			ManagedPolicies: &managedPolicies,
 			InlinePolicies: &map[string]awsiam.PolicyDocument{
-				"EC2AndEKSPermissions": awsiam.NewPolicyDocument(&awsiam.PolicyDocumentProps{
+				"LambdaPermissions": awsiam.NewPolicyDocument(&awsiam.PolicyDocumentProps{
 					Statements: &[]awsiam.PolicyStatement{
 						awsiam.NewPolicyStatement(&awsiam.PolicyStatementProps{
 							Effect: awsiam.Effect_ALLOW,
@@ -93,6 +89,9 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 								"ec2:DescribeInstances",
 								"ec2:TerminateInstances",
 								"eks:DescribeCluster",
+								"logs:CreateLogGroup",
+								"logs:CreateLogStream",
+								"logs:PutLogEvents",
 							),
 							Resources: jsii.Strings("*"),
 						}),
