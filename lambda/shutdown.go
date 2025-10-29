@@ -10,12 +10,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
-// ShutdownEC2Instances terminates EC2 instances with a specific tag.
-func ShutdownEC2Instances(ctx context.Context) error {
-	ec2NodeTagKey := "tag:karpenter.sh/nodepool"
-	shutdownTag := os.Getenv("KARPENTER_NODEPOOL_NAME")
-	if shutdownTag == "" {
-		return fmt.Errorf("KARPENTER_NODEPOOL_NAME environment variable not set")
+// ShutdownEC2Instances terminates EC2 instances with tags matching the given nodepools.
+func ShutdownEC2Instances(ctx context.Context, nodePoolNames []string) error {
+	if len(nodePoolNames) == 0 {
+		return fmt.Errorf("no nodepool names provided")
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(os.Getenv("AWS_REGION")))
@@ -25,11 +23,13 @@ func ShutdownEC2Instances(ctx context.Context) error {
 
 	ec2Svc := ec2.NewFromConfig(cfg)
 
+	// Build filters for all nodepools
+	ec2NodeTagKey := "tag:karpenter.sh/nodepool"
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{
 			{
 				Name:   &ec2NodeTagKey,
-				Values: []string{shutdownTag},
+				Values: nodePoolNames,
 			},
 		},
 	}
@@ -55,8 +55,9 @@ func ShutdownEC2Instances(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to terminate instances: %v", err)
 		}
+		fmt.Printf("Successfully terminated %d instance(s)\n", len(instanceIds))
 	} else {
-		fmt.Printf("Found no matching ec2 instances for filter %s", shutdownTag)
+		fmt.Printf("Found no matching EC2 instances for nodepools: %v\n", nodePoolNames)
 	}
 
 	return nil

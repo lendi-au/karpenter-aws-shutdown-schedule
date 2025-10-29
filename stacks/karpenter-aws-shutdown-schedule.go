@@ -107,11 +107,11 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	// ========================================================================
 	// LAMBDA ENVIRONMENT VARIABLES
 	// ========================================================================
-	nodepool := utils.GetenvDefault("KARPENTER_NODEPOOL_NAME", "default")
+	nodepools := utils.GetenvDefault("KARPENTER_NODEPOOLS", "default")
 	k8sHost := utils.GetenvDefault("KUBERNETES_SERVICE_HOST", "https://k8s.api")
 	clusterName := utils.GetenvDefault("KUBERNETES_CLUSTER_NAME", "dummy")
 	envMap := map[string]*string{
-		"KARPENTER_NODEPOOL_NAME": jsii.String(nodepool),
+		"KARPENTER_NODEPOOLS":     jsii.String(nodepools),
 		"KUBERNETES_SERVICE_HOST": &k8sHost,
 		"KUBERNETES_CLUSTER_NAME": &clusterName,
 	}
