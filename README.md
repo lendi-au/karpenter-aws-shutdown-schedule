@@ -6,8 +6,9 @@ A Go-based AWS CDK project that automatically manages Karpenter nodepools on a s
 
 This project deploys an AWS Lambda function that:
 
-- **Shuts down** Karpenter nodepools by setting CPU limits to 0, deleting associated nodeclaims, and terminating EC2 instances
-- **Starts up** Karpenter nodepools by restoring CPU limits to allow scaling
+- **Shuts down** one or more Karpenter nodepools by setting CPU limits to 0, deleting associated nodeclaims, and terminating EC2 instances
+- **Starts up** one or more Karpenter nodepools by restoring CPU limits to allow scaling
+- Supports managing multiple nodepools simultaneously with a single Lambda invocation
 - Operates on a configurable schedule using AWS EventBridge Scheduler with timezone support
 
 ## Architecture
@@ -51,8 +52,9 @@ KUBERNETES_SERVICE_HOST="https://<your-eks-api-server>"
 # The name of your EKS cluster.
 KUBERNETES_CLUSTER_NAME="<your-cluster-name>"
 
-# The name of the Karpenter nodepool to manage.
-KARPENTER_NODEPOOL_NAME="<your-nodepool-name>"
+# Comma-separated list of Karpenter nodepool names to manage.
+# Example: "spot-nodes" or "spot-nodes,on-demand-nodes,gpu-nodes"
+KARPENTER_NODEPOOLS="<your-nodepool-name>"
 
 # The CPU limit to set when scaling up the nodepool.
 KARPENTER_NODEPOOL_LIMITS_CPU="1000"
@@ -103,24 +105,33 @@ This command will build the Lambda function, package it, and deploy the CDK stac
 
 ## How It Works
 
+The Lambda function processes each nodepool specified in the `KARPENTER_NODEPOOLS` environment variable (comma-separated list).
+
 ### Shutdown Process
+
+For each nodepool:
 
 1.  **Scale Down Nodepool**: The Lambda function sets the `spec.limits.cpu` of the target Karpenter nodepool to "0". This prevents Karpenter from provisioning new nodes.
 2.  **Delete Nodeclaims**: It then deletes all `nodeclaims` associated with the nodepool. This triggers Karpenter to terminate the corresponding nodes.
-3.  **Terminate EC2 Instances**: Finally, it terminates any remaining EC2 instances that are tagged with the nodepool's name.
+3.  **Terminate EC2 Instances**: Finally, it terminates any remaining EC2 instances that are tagged with any of the specified nodepool names.
 
 ### Startup Process
+
+For each nodepool:
 
 1.  **Scale Up Nodepool**: The Lambda function restores the `spec.limits.cpu` of the nodepool to the value defined in the `KARPENTER_NODEPOOL_LIMITS_CPU` environment variable.
 2.  **Automatic Scaling**: Karpenter will then automatically provision new nodes as needed to meet the demands of pending pods.
 
 ## IAM Permissions
 
-The Lambda function requires the following AWS permissions:
+The Lambda function requires the following AWS permissions (automatically configured when deployed):
 
-- `ec2:DescribeInstances`
-- `ec2:TerminateInstances`
-- `eks:DescribeCluster`
+- `ec2:DescribeInstances` - To find EC2 instances tagged with nodepool names
+- `ec2:TerminateInstances` - To terminate instances during shutdown
+- `eks:DescribeCluster` - To authenticate with the EKS cluster
+- `logs:CreateLogGroup` - To create CloudWatch log groups
+- `logs:CreateLogStream` - To create CloudWatch log streams
+- `logs:PutLogEvents` - To write logs to CloudWatch
 
 Additionally, the IAM role used by the Lambda function must be mapped to a Kubernetes user or group in the `aws-auth` ConfigMap of your EKS cluster. This allows the Lambda function to authenticate with the Kubernetes API server.
 
