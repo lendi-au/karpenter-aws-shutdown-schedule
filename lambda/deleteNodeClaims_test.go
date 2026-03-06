@@ -27,7 +27,7 @@ func TestDeleteSpotNodeclaimsNoItems(t *testing.T) {
 	var dynamicClient dynamic.Interface = fakeDynamicClient
 
 	nodePoolName := "test-pool"
-	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName)
+	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, false)
 
 	// Should succeed with no items to delete
 	assert.NoError(t, err)
@@ -68,7 +68,7 @@ func TestDeleteSpotNodeclaimsWithItems(t *testing.T) {
 	var dynamicClient dynamic.Interface = fakeDynamicClient
 
 	nodePoolName := "test-pool"
-	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName)
+	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, false)
 
 	// Should succeed
 	assert.NoError(t, err)
@@ -116,7 +116,7 @@ func TestDeleteSpotNodeclaimsWithFinalizers(t *testing.T) {
 
 	var dynamicClient dynamic.Interface = fakeDynamicClient
 
-	err := deleteSpotNodeclaims(ctx, dynamicClient, "test-pool")
+	err := deleteSpotNodeclaims(ctx, dynamicClient, "test-pool", true)
 	assert.NoError(t, err)
 
 	listResult, err := dynamicClient.Resource(nodeClaimGVR).List(ctx, metav1.ListOptions{

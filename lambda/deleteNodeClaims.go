@@ -11,7 +11,7 @@ import (
 	"k8s.io/client-go/dynamic"
 )
 
-func deleteSpotNodeclaims(ctx context.Context, dynamicClient dynamic.Interface, nodePoolName string) error {
+func deleteSpotNodeclaims(ctx context.Context, dynamicClient dynamic.Interface, nodePoolName string, forcefulTermination bool) error {
 	nodeClaimGVR := schema.GroupVersionResource{
 		Group:    "karpenter.sh",
 		Version:  "v1",
@@ -38,24 +38,26 @@ func deleteSpotNodeclaims(ctx context.Context, dynamicClient dynamic.Interface, 
 	for _, nodeclaim := range nodeClaimList.Items {
 		name := nodeclaim.GetName()
 
-		// Remove finalizers to bypass PodDisruptionBudget blocks that prevent graceful drain.
-		// Karpenter sets a karpenter.sh/termination finalizer which blocks deletion when PDBs
-		// prevent pod evictions. Removing finalizers forces immediate deletion.
-		if finalizers := nodeclaim.GetFinalizers(); len(finalizers) > 0 {
-			fmt.Printf("Removing finalizers from nodeclaim %s: %v\n", name, finalizers)
-			patch, err := json.Marshal(map[string]interface{}{
-				"metadata": map[string]interface{}{
-					"finalizers": []string{},
-				},
-			})
-			if err != nil {
-				return fmt.Errorf("failed to marshal finalizer patch for nodeclaim %s: %v", name, err)
+		if forcefulTermination {
+			// Remove finalizers to bypass PodDisruptionBudget blocks that prevent graceful drain.
+			// Karpenter sets a karpenter.sh/termination finalizer which blocks deletion when PDBs
+			// prevent pod evictions. Removing finalizers forces immediate deletion.
+			if finalizers := nodeclaim.GetFinalizers(); len(finalizers) > 0 {
+				fmt.Printf("Removing finalizers from nodeclaim %s: %v\n", name, finalizers)
+				patch, err := json.Marshal(map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"finalizers": []string{},
+					},
+				})
+				if err != nil {
+					return fmt.Errorf("failed to marshal finalizer patch for nodeclaim %s: %v", name, err)
+				}
+				_, err = dynamicClient.Resource(nodeClaimGVR).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to remove finalizers from nodeclaim %s: %v", name, err)
+				}
+				fmt.Printf("Successfully removed finalizers from nodeclaim: %s\n", name)
 			}
-			_, err = dynamicClient.Resource(nodeClaimGVR).Patch(ctx, name, types.MergePatchType, patch, metav1.PatchOptions{})
-			if err != nil {
-				return fmt.Errorf("failed to remove finalizers from nodeclaim %s: %v", name, err)
-			}
-			fmt.Printf("Successfully removed finalizers from nodeclaim: %s\n", name)
 		}
 
 		fmt.Printf("Deleting nodeclaim: %s\n", name)
