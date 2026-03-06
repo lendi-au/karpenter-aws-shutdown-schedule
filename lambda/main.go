@@ -25,6 +25,8 @@ func handler(ctx context.Context, request ActionEvent) error {
 		return fmt.Errorf("KARPENTER_NODEPOOLS environment variable not set")
 	}
 
+	forcefulTermination := strings.EqualFold(os.Getenv("FORCEFUL_NODEPOOLS_TERMINATION"), "true")
+
 	// Parse comma-separated list of nodepools
 	nodePoolNames := strings.Split(nodePoolsStr, ",")
 	for i := range nodePoolNames {
@@ -74,8 +76,8 @@ func handler(ctx context.Context, request ActionEvent) error {
 			fmt.Printf("Successfully updated nodepool %s to set cpu limit to 0\n", nodePoolName)
 
 			// Delete all nodeclaims with label karpenter.sh/nodepool=<nodepool-name>
-			fmt.Printf("Deleting nodeclaims for nodepool %s...\n", nodePoolName)
-			if err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName); err != nil {
+			fmt.Printf("Deleting nodeclaims for nodepool %s (forcefulTermination=%v)...\n", nodePoolName, forcefulTermination)
+			if err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, forcefulTermination); err != nil {
 				return fmt.Errorf("failed to delete nodeclaims for nodepool %s: %v", nodePoolName, err)
 			}
 		case "startup":

@@ -27,7 +27,7 @@ func TestDeleteSpotNodeclaimsNoItems(t *testing.T) {
 	var dynamicClient dynamic.Interface = fakeDynamicClient
 
 	nodePoolName := "test-pool"
-	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName)
+	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, false)
 
 	// Should succeed with no items to delete
 	assert.NoError(t, err)
@@ -68,12 +68,57 @@ func TestDeleteSpotNodeclaimsWithItems(t *testing.T) {
 	var dynamicClient dynamic.Interface = fakeDynamicClient
 
 	nodePoolName := "test-pool"
-	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName)
+	err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, false)
 
 	// Should succeed
 	assert.NoError(t, err)
 
 	// Verify the nodeclaim was deleted by trying to list it
+	listResult, err := dynamicClient.Resource(nodeClaimGVR).List(ctx, metav1.ListOptions{
+		LabelSelector: "karpenter.sh/nodepool=test-pool",
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, 0, len(listResult.Items))
+}
+
+func TestDeleteSpotNodeclaimsWithFinalizers(t *testing.T) {
+	ctx := context.Background()
+
+	nodeClaimGVR := schema.GroupVersionResource{
+		Group:    "karpenter.sh",
+		Version:  "v1",
+		Resource: "nodeclaims",
+	}
+
+	// NodeClaim with a Karpenter finalizer simulating a PDB-blocked node
+	nodeclaim := &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "karpenter.sh/v1",
+			"kind":       "NodeClaim",
+			"metadata": map[string]interface{}{
+				"name": "test-nodeclaim-finalizer",
+				"labels": map[string]interface{}{
+					"karpenter.sh/nodepool": "test-pool",
+				},
+				"finalizers": []interface{}{
+					"karpenter.sh/termination",
+				},
+			},
+		},
+	}
+
+	scheme := runtime.NewScheme()
+	fakeDynamicClient := fake.NewSimpleDynamicClientWithCustomListKinds(scheme,
+		map[schema.GroupVersionResource]string{
+			{Group: "karpenter.sh", Version: "v1", Resource: "nodeclaims"}: "NodeClaimList",
+		},
+		nodeclaim)
+
+	var dynamicClient dynamic.Interface = fakeDynamicClient
+
+	err := deleteSpotNodeclaims(ctx, dynamicClient, "test-pool", true)
+	assert.NoError(t, err)
+
 	listResult, err := dynamicClient.Resource(nodeClaimGVR).List(ctx, metav1.ListOptions{
 		LabelSelector: "karpenter.sh/nodepool=test-pool",
 	})
