@@ -118,6 +118,9 @@ func NewKarpenterAwsShutdownScheduleStack(scope constructs.Construct, id string,
 	if os.Getenv("KARPENTER_EXTRA_SHUTDOWN_TAG") != "" {
 		envMap["SHUTDOWN_TAG"] = jsii.String(os.Getenv("KARPENTER_EXTRA_SHUTDOWN_TAG"))
 	}
+	if os.Getenv("FORCEFUL_NODEPOOLS_TERMINATION") != "" {
+		envMap["FORCEFUL_NODEPOOLS_TERMINATION"] = jsii.String(os.Getenv("FORCEFUL_NODEPOOLS_TERMINATION"))
+	}
 
 	// ========================================================================
 	// BUILD PATH CONFIGURATION
