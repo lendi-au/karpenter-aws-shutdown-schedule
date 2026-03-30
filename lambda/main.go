@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/lendi-au/karpenter-aws-shutdown-schedule/pkg/utils"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -97,6 +100,29 @@ func handler(ctx context.Context, request ActionEvent) error {
 				return fmt.Errorf("failed to update nodepool %s: %v", nodePoolName, err)
 			}
 			fmt.Printf("Successfully updated nodepool %s to restore cpu limit to %s\n", nodePoolName, cpuLimit)
+		}
+	}
+
+	if request.Action == "shutdown" {
+		typedClient, err := newTypedClient(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to create typed client: %v", err)
+		}
+
+		waitSeconds, err := strconv.Atoi(utils.GetenvDefault("POST_DELETE_WAIT_SECONDS", "30"))
+		if err != nil {
+			waitSeconds = 30
+		}
+		fmt.Printf("Waiting %ds for Karpenter to clean up nodes...\n", waitSeconds)
+		time.Sleep(time.Duration(waitSeconds) * time.Second)
+
+		nodeNames, err := deleteStuckNodes(ctx, typedClient, nodePoolNames)
+		if err != nil {
+			return fmt.Errorf("failed to delete stuck nodes: %v", err)
+		}
+
+		if err := deleteStuckPods(ctx, typedClient, nodeNames); err != nil {
+			return fmt.Errorf("failed to delete stuck pods: %v", err)
 		}
 	}
 

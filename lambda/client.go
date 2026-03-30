@@ -11,11 +11,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/lendi-au/karpenter-aws-shutdown-schedule/pkg/utils"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/aws-iam-authenticator/pkg/token"
 )
 
-func newDynamicClient(ctx context.Context) (*dynamic.DynamicClient, error) {
+func newRestConfig(ctx context.Context) (*rest.Config, error) {
 	clusterName := os.Getenv("KUBERNETES_CLUSTER_NAME")
 	if clusterName == "" {
 		return nil, fmt.Errorf("KUBERNETES_CLUSTER_NAME environment variable not set")
@@ -46,7 +47,6 @@ func newDynamicClient(ctx context.Context) (*dynamic.DynamicClient, error) {
 		Region:    region,
 	}
 	tok, err := gen.GetWithOptions(opts)
-
 	if err != nil {
 		return nil, fmt.Errorf("error generating token: %w", err)
 	}
@@ -64,18 +64,35 @@ func newDynamicClient(ctx context.Context) (*dynamic.DynamicClient, error) {
 		return nil, err
 	}
 
-	config := &rest.Config{
+	return &rest.Config{
 		Host:        os.Getenv("KUBERNETES_SERVICE_HOST"),
 		BearerToken: tok.Token,
 		TLSClientConfig: rest.TLSClientConfig{
 			CAData: ca,
 		},
-	}
+	}, nil
+}
 
-	dynamicClient, err := dynamic.NewForConfig(config)
+func newDynamicClient(ctx context.Context) (*dynamic.DynamicClient, error) {
+	cfg, err := newRestConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dynamicClient, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("error creating dynamic Kubernetes client: %w", err)
 	}
-
 	return dynamicClient, nil
+}
+
+func newTypedClient(ctx context.Context) (kubernetes.Interface, error) {
+	cfg, err := newRestConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+	client, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("error creating Kubernetes client: %w", err)
+	}
+	return client, nil
 }
