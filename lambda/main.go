@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/lendi-au/karpenter-aws-shutdown-schedule/pkg/utils"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -60,6 +61,10 @@ func handler(ctx context.Context, request ActionEvent) error {
 
 		np, err := dynamicClient.Resource(nodePoolGVR).Get(ctx, nodePoolName, metav1.GetOptions{})
 		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				fmt.Printf("Nodepool %s not found, skipping\n", nodePoolName)
+				continue
+			}
 			return fmt.Errorf("failed to get nodepool %s: %v", nodePoolName, err)
 		}
 
@@ -126,9 +131,11 @@ func handler(ctx context.Context, request ActionEvent) error {
 		}
 	}
 
-	// EC2 interaction - pass all nodepool names
-	if err := ShutdownEC2Instances(ctx, nodePoolNames); err != nil {
-		return err
+	// EC2 interaction - only terminate instances during shutdown
+	if request.Action == "shutdown" {
+		if err := ShutdownEC2Instances(ctx, nodePoolNames); err != nil {
+			return err
+		}
 	}
 
 	return nil
