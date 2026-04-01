@@ -79,6 +79,27 @@ func TestDeleteStuckNodesSkipsEmptyPoolName(t *testing.T) {
 	assert.Empty(t, nodeNames)
 }
 
+func TestDeleteStuckNodesWithFinalizers(t *testing.T) {
+	ctx := context.Background()
+
+	node := &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "ip-10-0-0-1",
+			Labels:     map[string]string{"karpenter.sh/nodepool": "test-pool"},
+			Finalizers: []string{"node.kubernetes.io/not-ready"},
+		},
+	}
+	client := fake.NewSimpleClientset(node)
+
+	nodeNames, err := deleteStuckNodes(ctx, client, []string{"test-pool"})
+
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ip-10-0-0-1"}, nodeNames)
+
+	_, err = client.CoreV1().Nodes().Get(ctx, "ip-10-0-0-1", metav1.GetOptions{})
+	assert.Error(t, err, "node with finalizers should have been deleted")
+}
+
 func TestDeleteStuckNodesOnlyMatchingPool(t *testing.T) {
 	ctx := context.Background()
 

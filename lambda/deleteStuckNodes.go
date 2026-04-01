@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 )
 
@@ -37,6 +39,23 @@ func deleteStuckNodes(ctx context.Context, client kubernetes.Interface, nodePool
 		for _, node := range nodes.Items {
 			nodeNames = append(nodeNames, node.Name)
 			fmt.Printf("Force-deleting node %s\n", node.Name)
+
+			// Remove finalizers before deletion — same issue as NodeClaims, finalizers
+			// block the API server from completing the deletion even with gracePeriod=0.
+			if len(node.Finalizers) > 0 {
+				fmt.Printf("Removing finalizers from node %s: %v\n", node.Name, node.Finalizers)
+				patch, _ := json.Marshal(map[string]interface{}{
+					"metadata": map[string]interface{}{
+						"finalizers": []string{},
+					},
+				})
+				if _, err := client.CoreV1().Nodes().Patch(
+					ctx, node.Name, types.MergePatchType, patch, metav1.PatchOptions{},
+				); err != nil {
+					fmt.Printf("Failed to remove finalizers from node %s: %v\n", node.Name, err)
+				}
+			}
+
 			gracePeriod := int64(0)
 			if err := client.CoreV1().Nodes().Delete(ctx, node.Name, metav1.DeleteOptions{
 				GracePeriodSeconds: &gracePeriod,
