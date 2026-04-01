@@ -23,13 +23,20 @@ func ShutdownEC2Instances(ctx context.Context, nodePoolNames []string) error {
 
 	ec2Svc := ec2.NewFromConfig(cfg)
 
-	// Build filters for all nodepools
+	// Build filters for all nodepools.
+	// Only target running instances — terminated/shutting-down instances remain
+	// visible in DescribeInstances for ~1h and would otherwise be included.
 	ec2NodeTagKey := "tag:karpenter.sh/nodepool"
+	instanceStateKey := "instance-state-name"
 	input := &ec2.DescribeInstancesInput{
 		Filters: []types.Filter{
 			{
 				Name:   &ec2NodeTagKey,
 				Values: nodePoolNames,
+			},
+			{
+				Name:   &instanceStateKey,
+				Values: []string{"running"},
 			},
 		},
 	}
