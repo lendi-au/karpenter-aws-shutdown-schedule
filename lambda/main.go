@@ -20,6 +20,15 @@ type ActionEvent struct {
 	Action string `json:"Action"`
 }
 
+func waitSeconds(envKey string, defaultVal int) {
+	secs, err := strconv.Atoi(utils.GetenvDefault(envKey, strconv.Itoa(defaultVal)))
+	if err != nil {
+		secs = defaultVal
+	}
+	fmt.Printf("Waiting %ds (%s)...\n", secs, envKey)
+	time.Sleep(time.Duration(secs) * time.Second)
+}
+
 func handler(ctx context.Context, request ActionEvent) error {
 	fmt.Printf("ctx: %v", ctx)
 	fmt.Printf("Requested action: %s", request.Action)
@@ -44,7 +53,6 @@ func handler(ctx context.Context, request ActionEvent) error {
 		return fmt.Errorf("failed to create dynamic client: %v", err)
 	}
 
-	// common const setup
 	nodePoolGVR := schema.GroupVersionResource{
 		Group:    "karpenter.sh",
 		Version:  "v1",
@@ -70,7 +78,7 @@ func handler(ctx context.Context, request ActionEvent) error {
 
 		switch request.Action {
 		case "shutdown":
-			fmt.Printf("Simulating scaling down nodepool %s\n", nodePoolName)
+			fmt.Printf("Scaling down nodepool %s\n", nodePoolName)
 			err = unstructured.SetNestedField(np.Object, "0", "spec", "limits", "cpu")
 			if err != nil {
 				return fmt.Errorf("failed to set cpu limit for nodepool %s: %v", nodePoolName, err)
@@ -83,11 +91,12 @@ func handler(ctx context.Context, request ActionEvent) error {
 
 			fmt.Printf("Successfully updated nodepool %s to set cpu limit to 0\n", nodePoolName)
 
-			// Delete all nodeclaims with label karpenter.sh/nodepool=<nodepool-name>
-			fmt.Printf("Deleting nodeclaims for nodepool %s (forcefulTermination=%v)...\n", nodePoolName, forcefulTermination)
-			if err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, forcefulTermination); err != nil {
+			// Pass 1: graceful deletion — let Karpenter attempt to drain pods normally
+			fmt.Printf("Gracefully deleting nodeclaims for nodepool %s...\n", nodePoolName)
+			if err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, false); err != nil {
 				return fmt.Errorf("failed to delete nodeclaims for nodepool %s: %v", nodePoolName, err)
 			}
+
 		case "startup":
 			fmt.Printf("Simulating scale up of nodepool %s\n", nodePoolName)
 			cpuLimit := os.Getenv("KARPENTER_NODEPOOL_LIMITS_CPU")
@@ -109,30 +118,43 @@ func handler(ctx context.Context, request ActionEvent) error {
 	}
 
 	if request.Action == "shutdown" {
+		// Wait for Karpenter to gracefully drain and delete NodeClaims
+		waitSeconds("GRACEFUL_TERMINATION_WAIT_SECONDS", 60)
+
+		if forcefulTermination {
+			// Pass 2: force-delete any NodeClaims still stuck (PDB-blocked or unreachable nodes)
+			for _, nodePoolName := range nodePoolNames {
+				if nodePoolName == "" {
+					continue
+				}
+				fmt.Printf("Force-deleting remaining nodeclaims for nodepool %s...\n", nodePoolName)
+				if err := deleteSpotNodeclaims(ctx, dynamicClient, nodePoolName, true); err != nil {
+					return fmt.Errorf("failed to force-delete nodeclaims for nodepool %s: %v", nodePoolName, err)
+				}
+			}
+		}
+
 		typedClient, err := newTypedClient(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to create typed client: %v", err)
 		}
 
-		waitSeconds, err := strconv.Atoi(utils.GetenvDefault("POST_DELETE_WAIT_SECONDS", "30"))
-		if err != nil {
-			waitSeconds = 30
-		}
-		fmt.Printf("Waiting %ds for Karpenter to clean up nodes...\n", waitSeconds)
-		time.Sleep(time.Duration(waitSeconds) * time.Second)
+		// Wait for NodeClaim deletion to propagate before checking nodes
+		waitSeconds("NODE_DELETE_WAIT_SECONDS", 60)
 
 		nodeNames, err := deleteStuckNodes(ctx, typedClient, nodePoolNames)
 		if err != nil {
 			return fmt.Errorf("failed to delete stuck nodes: %v", err)
 		}
 
+		// Wait for node deletion to propagate before checking pods
+		waitSeconds("POD_DELETE_WAIT_SECONDS", 60)
+
 		if err := deleteStuckPods(ctx, typedClient, nodeNames); err != nil {
 			return fmt.Errorf("failed to delete stuck pods: %v", err)
 		}
-	}
 
-	// EC2 interaction - only terminate instances during shutdown
-	if request.Action == "shutdown" {
+		// Terminate EC2 instances
 		if err := ShutdownEC2Instances(ctx, nodePoolNames); err != nil {
 			return err
 		}

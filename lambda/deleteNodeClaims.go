@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
@@ -63,6 +64,11 @@ func deleteSpotNodeclaims(ctx context.Context, dynamicClient dynamic.Interface, 
 		fmt.Printf("Deleting nodeclaim: %s\n", name)
 		err := dynamicClient.Resource(nodeClaimGVR).Delete(ctx, name, metav1.DeleteOptions{})
 		if err != nil {
+			if k8serrors.IsNotFound(err) {
+				// Karpenter already garbage-collected the NodeClaim after finalizer removal
+				fmt.Printf("Nodeclaim %s already deleted, skipping\n", name)
+				continue
+			}
 			fmt.Printf("Failed to delete nodeclaim %s: %v\n", name, err)
 			return fmt.Errorf("failed to delete nodeclaim %s: %v", name, err)
 		}
